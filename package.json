@@ -6,9 +6,9 @@
     "start": "node index.js"
   },
   "dependencies": {
-    "discord.js": "^14.0.0",
     "@discordjs/voice": "^0.14.0",
-    "play-dl": "^1.7.5",
-    "dotenv": "^16.0.3"
+    "discord.js": "^14.19.3",
+    "dotenv": "^16.5.0",
+    "play-dl": "^1.7.5"
   }
 }
