@@ -25,6 +25,7 @@ client.on('interactionCreate', async interaction => {
 
   if (interaction.isChatInputCommand() && interaction.commandName === 'play') {
     const query = interaction.options.getString('query');
+    console.log('Buscando canción:', query); // <-- Aquí el primer console.log
 
     const voiceChannel = interaction.member.voice.channel;
     if (!voiceChannel) {
@@ -35,12 +36,14 @@ client.on('interactionCreate', async interaction => {
     let results;
     try {
       results = await play.search(query, { limit: 5, source: { youtube: "video" } });
+      console.log('Resultados obtenidos:', results.length); // <-- Segundo console.log
     } catch (err) {
-      console.error(err);
+      console.error('Error en búsqueda:', err); // <-- Loguear error
       return interaction.reply('❌ Error al buscar canciones.');
     }
 
     if (!results.length) {
+      console.log('No se encontraron canciones'); // <-- Tercer console.log
       return interaction.reply('❌ No se encontraron canciones para tu búsqueda.');
     }
 
