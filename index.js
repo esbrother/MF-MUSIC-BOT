@@ -1,85 +1,70 @@
 require('dotenv').config();
 const { Client, GatewayIntentBits } = require('discord.js');
-const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus } = require('@discordjs/voice');
+const { joinVoiceChannel, createAudioPlayer, createAudioResource } = require('@discordjs/voice');
 const play = require('play-dl');
-
-if (!process.env.TOKEN) {
-  console.error('❌ ERROR: El token no está configurado en .env');
-  process.exit(1);
-}
-
-if (!process.env.YOUTUBE_API_KEY) {
-  console.error('❌ ERROR: La API Key de YouTube no está configurada en .env');
-  process.exit(1);
-}
-
-// Configura la API key para play-dl
-play.setToken({
-  youtube: {
-    api_key: process.env.YOUTUBE_API_KEY
-  }
-});
 
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildVoiceStates,
-  ],
+    GatewayIntentBits.GuildVoiceStates
+  ]
 });
 
 client.once('ready', () => {
   console.log(`✅ Bot conectado como ${client.user.tag}`);
 });
 
-client.on('messageCreate', async (message) => {
+client.on('messageCreate', async message => {
+  if (!message.content.startsWith('!play')) return;
   if (message.author.bot) return;
 
-  // Solo comandos que comienzan con !play
-  if (!message.content.toLowerCase().startsWith('!play')) return;
+  const args = message.content.split(' ').slice(1);
+  const query = args.join(' ');
+  if (!query) return message.reply('❌ Por favor escribe el nombre o link de la canción.');
 
-  const args = message.content.split(' ');
-  const url = args[1];
-
-  if (!url) return message.reply('❌ Debes proporcionar un enlace de YouTube.');
-
-  // Verifica que el usuario esté en un canal de voz
   const voiceChannel = message.member.voice.channel;
-  if (!voiceChannel) return message.reply('❌ ¡Debes estar en un canal de voz para reproducir música!');
+  if (!voiceChannel) return message.reply('❌ ¡Debes estar en un canal de voz!');
 
+  let searchResults;
   try {
-    // Conéctate al canal de voz
+    searchResults = await play.search(query, { limit: 5 });
+  } catch (error) {
+    console.error(error);
+    return message.reply('❌ Error al buscar la canción.');
+  }
+
+  if (!searchResults.length) return message.reply('❌ No encontré resultados para tu búsqueda.');
+
+  let replyMsg = '🎶 Selecciona una canción escribiendo el número:\n';
+  searchResults.forEach((song, i) => {
+    replyMsg += `**${i + 1}.** ${song.title} - ${song.channel.name}\n`;
+  });
+  await message.reply(replyMsg);
+
+  const filter = m => m.author.id === message.author.id && /^[1-5]$/.test(m.content);
+  try {
+    const collected = await message.channel.awaitMessages({ filter, max: 1, time: 30000, errors: ['time'] });
+    const choice = parseInt(collected.first().content);
+    const selectedSong = searchResults[choice - 1];
+
+    const stream = await play.stream(selectedSong.url);
+    const resource = createAudioResource(stream.stream, { inputType: stream.type });
+
     const connection = joinVoiceChannel({
       channelId: voiceChannel.id,
       guildId: message.guild.id,
-      adapterCreator: message.guild.voiceAdapterCreator,
+      adapterCreator: message.guild.voiceAdapterCreator
     });
 
-    // Descarga y crea recurso de audio
-    const stream = await play.stream(url);
-    const resource = createAudioResource(stream.stream, { inputType: stream.type });
-
-    // Crea y configura el reproductor de audio
     const player = createAudioPlayer();
-
     player.play(resource);
     connection.subscribe(player);
 
-    player.on(AudioPlayerStatus.Idle, () => {
-      connection.destroy(); // Salir del canal cuando termine
-    });
-
-    player.on('error', (error) => {
-      console.error('Error en el reproductor de audio:', error);
-      message.channel.send('❌ Hubo un error reproduciendo la canción.');
-      connection.destroy();
-    });
-
-    await message.reply(`🎶 Reproduciendo: ${url}`);
-  } catch (error) {
-    console.error('Error en comando !play:', error);
-    message.reply('❌ No pude reproducir esa canción. Revisa que el enlace sea válido.');
+    await message.reply(`🎵 Reproduciendo: **${selectedSong.title}**`);
+  } catch {
+    message.reply('⌛ Tiempo agotado, no se seleccionó ninguna canción.');
   }
 });
 

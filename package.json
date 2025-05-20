@@ -9,6 +9,6 @@
     "@discordjs/voice": "^0.14.0",
     "discord.js": "^14.19.3",
     "dotenv": "^16.5.0",
-    "play-dl": "^1.7.5"
+    "play-dl": "^1.9.7"
   }
 }
