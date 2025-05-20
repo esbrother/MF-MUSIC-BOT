@@ -1,1 +1,36 @@
+# Node modules
+node_modules/
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment variables
 .env
+
+# Lock file (opcional, depende si quieres subirlo o no)
+package-lock.json
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+
+# Build output (si tienes alguna carpeta de build o dist)
+dist/
+build/
+
+# IDEs y editores
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Otros archivos temporales
+*.tmp
+*.temp
