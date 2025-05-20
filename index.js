@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits, Partials } = require('discord.js');
+const { Client, GatewayIntentBits, ActionRowBuilder, StringSelectMenuBuilder } = require('discord.js');
 const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus } = require('@discordjs/voice');
 const play = require('play-dl');
 
@@ -8,64 +8,105 @@ const client = new Client({
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildVoiceStates,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent
-  ],
-  partials: [Partials.Channel],
+    GatewayIntentBits.MessageContent,
+  ]
 });
+
+const player = createAudioPlayer();
 
 client.once('ready', () => {
-  console.log(`✅ Bot listo! Conectado como ${client.user.tag}`);
+  console.log(`✅ Bot listo como ${client.user.tag}`);
 });
 
-client.on('interactionCreate', async interaction => {
-  if (!interaction.isCommand()) return;
+const activeSearches = new Map(); // Para guardar búsquedas por usuario
 
-  if (interaction.commandName === 'play') {
+client.on('interactionCreate', async interaction => {
+  if (!interaction.isChatInputCommand() && !interaction.isStringSelectMenu()) return;
+
+  if (interaction.isChatInputCommand() && interaction.commandName === 'play') {
     const query = interaction.options.getString('query');
 
-    // Verifica que el usuario esté en canal de voz
     const voiceChannel = interaction.member.voice.channel;
     if (!voiceChannel) {
-      return interaction.reply('❌ ¡Debes estar en un canal de voz para usar este comando!');
+      return interaction.reply('❌ Debes estar en un canal de voz para usar este comando.');
     }
+
+    // Buscar canciones (max 5)
+    let results;
+    try {
+      results = await play.search(query, { limit: 5, source: { youtube: "video" } });
+    } catch (err) {
+      console.error(err);
+      return interaction.reply('❌ Error al buscar canciones.');
+    }
+
+    if (!results.length) {
+      return interaction.reply('❌ No se encontraron canciones para tu búsqueda.');
+    }
+
+    // Guardar resultados para el usuario que pidió
+    activeSearches.set(interaction.user.id, { results, voiceChannel });
+
+    // Construir menú select con resultados
+    const options = results.map((song, i) => ({
+      label: song.title.length > 100 ? song.title.substring(0, 97) + '...' : song.title,
+      description: song.channel.name.length > 100 ? song.channel.name.substring(0, 97) + '...' : song.channel.name,
+      value: i.toString()
+    }));
+
+    const row = new ActionRowBuilder()
+      .addComponents(
+        new StringSelectMenuBuilder()
+          .setCustomId('select_song')
+          .setPlaceholder('Selecciona la canción a reproducir')
+          .addOptions(options)
+      );
+
+    await interaction.reply({ content: '🎶 Selecciona una canción:', components: [row], ephemeral: true });
+
+  } else if (interaction.isStringSelectMenu() && interaction.customId === 'select_song') {
+    const userId = interaction.user.id;
+    const searchData = activeSearches.get(userId);
+    if (!searchData) {
+      return interaction.reply({ content: 'No hay búsqueda activa. Usa /play para buscar.', ephemeral: true });
+    }
+
+    const selectedIndex = parseInt(interaction.values[0]);
+    const song = searchData.results[selectedIndex];
+    const voiceChannel = searchData.voiceChannel;
 
     await interaction.deferReply();
 
     try {
-      // Busca y obtiene info del video o playlist
-      let source;
-      if (play.yt_validate(query) === 'video') {
-        source = await play.stream(query);
-      } else {
-        // Buscar por palabra clave en YouTube
-        const searchResults = await play.search(query, { limit: 1 });
-        if (searchResults.length === 0) return interaction.editReply('❌ No encontré ninguna canción con ese nombre.');
-        source = await play.stream(searchResults[0].url);
-      }
-
-      // Conecta al canal de voz
-      const connection = joinVoiceChannel({
-        channelId: voiceChannel.id,
-        guildId: interaction.guildId,
-        adapterCreator: interaction.guild.voiceAdapterCreator,
-      });
-
-      const player = createAudioPlayer();
-      const resource = createAudioResource(source.stream, { inputType: source.type });
-
-      player.play(resource);
-      connection.subscribe(player);
-
-      player.on(AudioPlayerStatus.Idle, () => {
-        connection.destroy(); // Desconectar cuando termine la canción
-      });
-
-      interaction.editReply(`🎶 Reproduciendo: **${source.videoDetails?.title || query}**`);
+      await playAndConnect(song.url, voiceChannel, interaction);
+      activeSearches.delete(userId);
     } catch (error) {
       console.error(error);
-      interaction.editReply('❌ Ocurrió un error al reproducir la canción.');
+      return interaction.editReply('❌ Ocurrió un error al reproducir la canción.');
     }
   }
 });
+
+async function playAndConnect(url, voiceChannel, interaction) {
+  const connection = joinVoiceChannel({
+    channelId: voiceChannel.id,
+    guildId: interaction.guild.id,
+    adapterCreator: interaction.guild.voiceAdapterCreator
+  });
+
+  const stream = await play.stream(url);
+  const resource = createAudioResource(stream.stream, { inputType: stream.type });
+
+  player.play(resource);
+  connection.subscribe(player);
+
+  player.once(AudioPlayerStatus.Playing, () => {
+    interaction.editReply(`🎵 Reproduciendo: **${url}**`);
+  });
+
+  player.once(AudioPlayerStatus.Idle, () => {
+    connection.destroy();
+  });
+}
 
 client.login(process.env.TOKEN);
