@@ -1,5 +1,5 @@
-const { REST, Routes, SlashCommandBuilder } = require('discord.js');
 require('dotenv').config();
+const { REST, Routes, SlashCommandBuilder } = require('discord.js');
 
 const commands = [
   new SlashCommandBuilder()
@@ -7,9 +7,11 @@ const commands = [
     .setDescription('Reproduce una canción')
     .addStringOption(option =>
       option.setName('query')
-        .setDescription('Nombre o enlace de la canción')
-        .setRequired(true)),
-].map(command => command.toJSON());
+        .setDescription('Nombre o URL de la canción')
+        .setRequired(true)
+    )
+    .toJSON()
+];
 
 const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 
@@ -20,7 +22,7 @@ const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
       Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID),
       { body: commands },
     );
-    console.log('¡Comandos registrados!');
+    console.log('Comandos registrados correctamente.');
   } catch (error) {
     console.error(error);
   }
