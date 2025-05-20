@@ -1,96 +1,55 @@
-require('dotenv').config();
-const { Client, GatewayIntentBits, ActionRowBuilder, StringSelectMenuBuilder } = require('discord.js');
-const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus } = require('@discordjs/voice');
+const { Client, GatewayIntentBits, Collection } = require('discord.js');
+const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, getVoiceConnection } = require('@discordjs/voice');
 const play = require('play-dl');
+require('dotenv').config();
+const fs = require('fs');
+const path = require('path');
 
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildVoiceStates,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildVoiceStates
   ]
 });
 
-const player = createAudioPlayer();
+client.commands = new Collection();
 
-client.once('ready', () => {
-  console.log(`✅ Bot listo como ${client.user.tag}`);
-});
+// Cargar todos los comandos desde la carpeta /commands
+const commandFiles = fs.readdirSync(path.join(__dirname, 'commands')).filter(file => file.endsWith('.js'));
+for (const file of commandFiles) {
+  const command = require(`./commands/${file}`);
+  client.commands.set(command.data.name, command);
+}
 
-const activeSearches = new Map(); // Para guardar búsquedas por usuario
-
+// Manejador de interacción de comandos
 client.on('interactionCreate', async interaction => {
-  if (!interaction.isChatInputCommand() && !interaction.isStringSelectMenu()) return;
-
-  if (interaction.isChatInputCommand() && interaction.commandName === 'play') {
-    const query = interaction.options.getString('query');
-    console.log('Buscando canción:', query); // <-- Aquí el primer console.log
-
-    const voiceChannel = interaction.member.voice.channel;
-    if (!voiceChannel) {
-      return interaction.reply('❌ Debes estar en un canal de voz para usar este comando.');
-    }
-
-    // Buscar canciones (max 5)
-    let results;
+  if (interaction.isChatInputCommand()) {
+    const command = client.commands.get(interaction.commandName);
+    if (!command) return;
     try {
-      results = await play.search(query, { limit: 5, source: { youtube: "video" } });
-      console.log('Resultados obtenidos:', results.length); // <-- Segundo console.log
-    } catch (err) {
-      console.error('Error en búsqueda:', err); // <-- Loguear error
-      return interaction.reply('❌ Error al buscar canciones.');
-    }
-
-    if (!results.length) {
-      console.log('No se encontraron canciones'); // <-- Tercer console.log
-      return interaction.reply('❌ No se encontraron canciones para tu búsqueda.');
-    }
-
-    // Guardar resultados para el usuario que pidió
-    activeSearches.set(interaction.user.id, { results, voiceChannel });
-
-    // Construir menú select con resultados
-    const options = results.map((song, i) => ({
-      label: song.title.length > 100 ? song.title.substring(0, 97) + '...' : song.title,
-      description: song.channel.name.length > 100 ? song.channel.name.substring(0, 97) + '...' : song.channel.name,
-      value: i.toString()
-    }));
-
-    const row = new ActionRowBuilder()
-      .addComponents(
-        new StringSelectMenuBuilder()
-          .setCustomId('select_song')
-          .setPlaceholder('Selecciona la canción a reproducir')
-          .addOptions(options)
-      );
-
-    await interaction.reply({ content: '🎶 Selecciona una canción:', components: [row], ephemeral: true });
-
-  } else if (interaction.isStringSelectMenu() && interaction.customId === 'select_song') {
-    const userId = interaction.user.id;
-    const searchData = activeSearches.get(userId);
-    if (!searchData) {
-      return interaction.reply({ content: 'No hay búsqueda activa. Usa /play para buscar.', ephemeral: true });
-    }
-
-    const selectedIndex = parseInt(interaction.values[0]);
-    const song = searchData.results[selectedIndex];
-    const voiceChannel = searchData.voiceChannel;
-
-    await interaction.deferReply();
-
-    try {
-      await playAndConnect(song.url, voiceChannel, interaction);
-      activeSearches.delete(userId);
+      await command.execute(interaction, client);
     } catch (error) {
       console.error(error);
-      return interaction.editReply('❌ Ocurrió un error al reproducir la canción.');
+      await interaction.reply({ content: '❌ Error al ejecutar el comando.', ephemeral: true });
+    }
+  }
+
+  if (interaction.isAutocomplete()) {
+    const command = client.commands.get(interaction.commandName);
+    if (!command || !command.autocomplete) return;
+    try {
+      await command.autocomplete(interaction);
+    } catch (error) {
+      console.error(error);
     }
   }
 });
 
-async function playAndConnect(url, voiceChannel, interaction) {
+// Lógica para reproducir audio (puede llamarse desde play.js)
+client.playSong = async (interaction, url) => {
+  const voiceChannel = interaction.member.voice.channel;
+  if (!voiceChannel) return interaction.reply('❌ Debes estar en un canal de voz.');
+
   const connection = joinVoiceChannel({
     channelId: voiceChannel.id,
     guildId: interaction.guild.id,
@@ -98,18 +57,29 @@ async function playAndConnect(url, voiceChannel, interaction) {
   });
 
   const stream = await play.stream(url);
-  const resource = createAudioResource(stream.stream, { inputType: stream.type });
+  const resource = createAudioResource(stream.stream, {
+    inputType: stream.type
+  });
 
-  player.play(resource);
+  const player = createAudioPlayer();
   connection.subscribe(player);
+  player.play(resource);
 
-  player.once(AudioPlayerStatus.Playing, () => {
-    interaction.editReply(`🎵 Reproduciendo: **${url}**`);
+  player.on(AudioPlayerStatus.Idle, () => {
+    const conn = getVoiceConnection(interaction.guild.id);
+    if (conn) conn.destroy();
   });
 
-  player.once(AudioPlayerStatus.Idle, () => {
-    connection.destroy();
+  return interaction.followUp(`▶️ Reproduciendo: ${url}`);
+};
+
+client.once('ready', () => {
+  console.log(`✅ Bot iniciado como ${client.user.tag}`);
+  play.setToken({
+    youtube: {
+      api_key: process.env.YOUTUBE_API_KEY
+    }
   });
-}
+});
 
 client.login(process.env.TOKEN);

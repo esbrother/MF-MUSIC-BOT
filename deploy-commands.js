@@ -1,29 +1,26 @@
+const { REST, Routes } = require('discord.js');
+const fs = require('node:fs');
 require('dotenv').config();
-const { REST, Routes, SlashCommandBuilder } = require('discord.js');
 
-const commands = [
-  new SlashCommandBuilder()
-    .setName('play')
-    .setDescription('Reproduce una canción')
-    .addStringOption(option =>
-      option.setName('query')
-        .setDescription('Nombre o URL de la canción')
-        .setRequired(true)
-    )
-    .toJSON()
-];
+const commands = [];
+const commandFiles = fs.readdirSync('./commands').filter(file => file.endsWith('.js'));
+
+for (const file of commandFiles) {
+  const command = require(`./commands/${file}`);
+  commands.push(command.data.toJSON());
+}
 
 const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 
 (async () => {
   try {
-    console.log('🔁 Registrando comandos...');
+    console.log('🚀 Registrando comandos slash...');
     await rest.put(
       Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID),
       { body: commands }
     );
     console.log('✅ Comandos registrados.');
   } catch (error) {
-    console.error('Error al registrar comandos:', error);
+    console.error(error);
   }
 })();
