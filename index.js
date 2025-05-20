@@ -1,9 +1,11 @@
 const { Client, GatewayIntentBits, Collection } = require('discord.js');
-const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, getVoiceConnection } = require('@discordjs/voice');
+const { joinVoiceChannel, getVoiceConnection } = require('@discordjs/voice');
 const play = require('play-dl');
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
+
+const { playSong } = require('./functions/player');
 
 const client = new Client({
   intents: [
@@ -28,7 +30,9 @@ client.on('interactionCreate', async interaction => {
       await command.execute(interaction, client);
     } catch (error) {
       console.error(error);
-      await interaction.reply({ content: '❌ Error al ejecutar el comando.', ephemeral: true });
+      if (!interaction.replied) {
+        await interaction.reply({ content: '❌ Error al ejecutar el comando.', ephemeral: true });
+      }
     }
   }
 
@@ -43,43 +47,30 @@ client.on('interactionCreate', async interaction => {
   }
 });
 
+// Función para reproducir canción, delega a functions/player.js
 client.playSong = async (interaction, url) => {
   const voiceChannel = interaction.member.voice.channel;
-  if (!voiceChannel) return interaction.reply('❌ Debes estar en un canal de voz.');
-
-  const connection = joinVoiceChannel({
-    channelId: voiceChannel.id,
-    guildId: interaction.guild.id,
-    adapterCreator: interaction.guild.voiceAdapterCreator
-  });
+  if (!voiceChannel) return interaction.reply({ content: '❌ Debes estar en un canal de voz.', ephemeral: true });
 
   try {
-    const stream = await play.stream(url);
-    const resource = createAudioResource(stream.stream, {
-      inputType: stream.type
-    });
-
-    const player = createAudioPlayer();
-    connection.subscribe(player);
-    player.play(resource);
-
-    player.on(AudioPlayerStatus.Idle, () => {
-      const conn = getVoiceConnection(interaction.guild.id);
-      if (conn) conn.destroy();
-    });
-  } catch (err) {
-    console.error('❌ Error al reproducir:', err);
-    interaction.followUp('❌ No se pudo reproducir la canción.');
+    await playSong(voiceChannel, url);
+  } catch (error) {
+    console.error('❌ Error al reproducir canción:', error);
+    if (!interaction.replied) {
+      interaction.followUp({ content: '❌ No se pudo reproducir la canción.', ephemeral: true });
+    }
   }
 };
 
 client.once('ready', () => {
   console.log(`✅ Bot iniciado como ${client.user.tag}`);
-  play.setToken({
-    youtube: {
-      api_key: process.env.YOUTUBE_API_KEY
-    }
-  });
+  if (process.env.YOUTUBE_API_KEY) {
+    play.setToken({
+      youtube: {
+        api_key: process.env.YOUTUBE_API_KEY
+      }
+    });
+  }
 });
 
 client.login(process.env.TOKEN);
