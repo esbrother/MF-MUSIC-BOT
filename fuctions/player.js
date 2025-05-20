@@ -33,10 +33,17 @@ async function playSong(voiceChannel, songUrl) {
     connection.subscribe(player);
 
     player.on(AudioPlayerStatus.Idle, () => {
-      connection.destroy();
+      const conn = getVoiceConnection(voiceChannel.guild.id);
+      if (conn) conn.destroy();
     });
+
+    player.on('error', error => {
+      console.error('Error en el reproductor:', error);
+    });
+
   } catch (error) {
     console.error('Error al reproducir la canción:', error);
+    throw error; // para que el index.js capture el error
   }
 }
 
