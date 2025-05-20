@@ -14,14 +14,12 @@ const client = new Client({
 
 client.commands = new Collection();
 
-// Cargar todos los comandos desde la carpeta /commands
 const commandFiles = fs.readdirSync(path.join(__dirname, 'commands')).filter(file => file.endsWith('.js'));
 for (const file of commandFiles) {
   const command = require(`./commands/${file}`);
   client.commands.set(command.data.name, command);
 }
 
-// Manejador de interacción de comandos
 client.on('interactionCreate', async interaction => {
   if (interaction.isChatInputCommand()) {
     const command = client.commands.get(interaction.commandName);
@@ -36,7 +34,7 @@ client.on('interactionCreate', async interaction => {
 
   if (interaction.isAutocomplete()) {
     const command = client.commands.get(interaction.commandName);
-    if (!command || !command.autocomplete) return;
+    if (!command?.autocomplete) return;
     try {
       await command.autocomplete(interaction);
     } catch (error) {
@@ -45,7 +43,6 @@ client.on('interactionCreate', async interaction => {
   }
 });
 
-// Lógica para reproducir audio (puede llamarse desde play.js)
 client.playSong = async (interaction, url) => {
   const voiceChannel = interaction.member.voice.channel;
   if (!voiceChannel) return interaction.reply('❌ Debes estar en un canal de voz.');
@@ -56,21 +53,24 @@ client.playSong = async (interaction, url) => {
     adapterCreator: interaction.guild.voiceAdapterCreator
   });
 
-  const stream = await play.stream(url);
-  const resource = createAudioResource(stream.stream, {
-    inputType: stream.type
-  });
+  try {
+    const stream = await play.stream(url);
+    const resource = createAudioResource(stream.stream, {
+      inputType: stream.type
+    });
 
-  const player = createAudioPlayer();
-  connection.subscribe(player);
-  player.play(resource);
+    const player = createAudioPlayer();
+    connection.subscribe(player);
+    player.play(resource);
 
-  player.on(AudioPlayerStatus.Idle, () => {
-    const conn = getVoiceConnection(interaction.guild.id);
-    if (conn) conn.destroy();
-  });
-
-  return interaction.followUp(`▶️ Reproduciendo: ${url}`);
+    player.on(AudioPlayerStatus.Idle, () => {
+      const conn = getVoiceConnection(interaction.guild.id);
+      if (conn) conn.destroy();
+    });
+  } catch (err) {
+    console.error('❌ Error al reproducir:', err);
+    interaction.followUp('❌ No se pudo reproducir la canción.');
+  }
 };
 
 client.once('ready', () => {
