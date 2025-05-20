@@ -49,5 +49,4 @@ process.on('unhandledRejection', (reason, promise) => {
 process.on('uncaughtException', (error) => {
   console.error('Uncaught Exception:', error);
 });
-play.setToken({ youtube: { api_key: 'AIzaSyAdEngZUNjAM9cXu6yhkfs8BL7acKXBdH4
-' } })
+play.setToken({ youtube: { api_key: 'AIzaSyAdEngZUNjAM9cXu6yhkfs8BL7acKXBdH4' } })
