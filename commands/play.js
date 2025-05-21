@@ -21,17 +21,23 @@ module.exports = {
       const results = await play.search(focusedValue, { limit: 5 });
 
       const choices = results.map(video => ({
-        name: video.title.slice(0, 100), // Limite 100 caracteres
+        name: video.title.slice(0, 100), // Discord impone límite de 100 caracteres
         value: video.url
       }));
 
+      // ✅ Solo responder si aún no se ha respondido
       if (!interaction.responded) {
         await interaction.respond(choices);
       }
     } catch (error) {
-      console.error('Error en autocomplete:', error);
+      console.error('❌ Error en autocomplete:', error);
+      // Evita segundo intento de respuesta si ya fue reconocida
       if (!interaction.responded) {
-        await interaction.respond([]);
+        try {
+          await interaction.respond([]);
+        } catch (err) {
+          console.error('❌ No se pudo enviar respuesta vacía en autocomplete:', err);
+        }
       }
     }
   },
@@ -47,16 +53,21 @@ module.exports = {
     }
 
     try {
-      // Aquí puedes poner la lógica para reproducir la canción (más adelante)
       await interaction.reply(`🔊 Reproduciendo: ${query}`);
+      // Aquí deberías insertar la lógica de reproducción real usando @discordjs/voice
     } catch (err) {
-      console.error('Error ejecutando /play:', err);
+      console.error('❌ Error ejecutando /play:', err);
 
-      if (!interaction.replied && !interaction.deferred) {
-        await interaction.reply({
-          content: '❌ Ocurrió un error al ejecutar el comando.',
-          ephemeral: true
-        });
+      // Verifica si ya se respondió
+      if (!interaction.replied && interaction.isRepliable()) {
+        try {
+          await interaction.reply({
+            content: '❌ Ocurrió un error al ejecutar el comando.',
+            ephemeral: true
+          });
+        } catch (e) {
+          console.error('❌ No se pudo enviar mensaje de error:', e);
+        }
       }
     }
   }
