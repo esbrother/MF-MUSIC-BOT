@@ -14,19 +14,26 @@ module.exports = {
 
   async autocomplete(interaction) {
     const focusedValue = interaction.options.getFocused();
-    if (!focusedValue) return interaction.respond([]);
+
+    if (!focusedValue) return;
 
     try {
       const results = await play.search(focusedValue, { limit: 5 });
+
       const choices = results.map(video => ({
-        name: `🎵 ${video.title}`,
+        name: video.title.slice(0, 100), // Discord impone límite de 100 caracteres
         value: video.url
       }));
 
-      await interaction.respond(choices);
+      // Evita error "Unknown Interaction"
+      if (!interaction.responded) {
+        await interaction.respond(choices);
+      }
     } catch (error) {
       console.error('Error en autocomplete:', error);
-      await interaction.respond([]);
+      if (!interaction.responded) {
+        await interaction.respond([]);
+      }
     }
   },
 
@@ -34,11 +41,25 @@ module.exports = {
     const query = interaction.options.getString('query');
 
     if (!query) {
-      return await interaction.reply({ content: '❌ No se proporcionó ninguna canción.', ephemeral: true });
+      // Usa "flags" para respuesta efímera
+      return await interaction.reply({
+        content: '❌ No se proporcionó ninguna canción.',
+        flags: 64 // efímero
+      });
     }
 
-    await interaction.reply(`🔊 Reproduciendo: ${query}`);
+    try {
+      await interaction.reply(`🔊 Reproduciendo: ${query}`);
+      // Aquí irá luego la lógica de reproducción real con @discordjs/voice
+    } catch (err) {
+      console.error('Error ejecutando /play:', err);
 
-    // Aquí puedes agregar la lógica de conexión a voz y reproducción con play-dl y @discordjs/voice
+      if (!interaction.replied) {
+        await interaction.reply({
+          content: '❌ Ocurrió un error al ejecutar el comando.',
+          flags: 64
+        });
+      }
+    }
   }
 };
