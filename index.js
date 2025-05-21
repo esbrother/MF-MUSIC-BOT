@@ -1,11 +1,19 @@
+require('dotenv').config();
 const { Client, GatewayIntentBits, Collection } = require('discord.js');
 const { joinVoiceChannel, getVoiceConnection } = require('@discordjs/voice');
 const play = require('play-dl');
-require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 
 const { playSong } = require('./functions/player');
+
+// Configura los tokens para play-dl ANTES de usarlo
+play.setToken({
+  youtube: {
+    api_key: process.env.YOUTUBE_API_KEY || null,
+    cookie: process.env.YOUTUBE_COOKIES || null
+  }
+});
 
 const client = new Client({
   intents: [
@@ -64,11 +72,6 @@ client.playSong = async (interaction, url) => {
 
 client.once('ready', () => {
   console.log(`✅ Bot iniciado como ${client.user.tag}`);
-  if (process.env.YOUTUBE_API_KEY) {
-    play.setToken({
-      youtube: {
-        api_key: process.env.YOUTUBE_API_KEY
-      }
-    });
-  }
 });
+
+client.login(process.env.TOKEN);
