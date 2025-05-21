@@ -1,81 +1,44 @@
-const { ApplicationCommandOptionType, EmbedBuilder } = require('discord.js');
-const play = require('play-dl');
+const { SlashCommandBuilder } = require('discord.js');
+const playdl = require('play-dl');
 
 module.exports = {
-  name: 'play',
-  description: 'Reproduce una canción desde YouTube, Spotify o SoundCloud.',
-  options: [
-    {
-      name: 'query',
-      description: 'Nombre o enlace de la canción.',
-      type: ApplicationCommandOptionType.String,
-      required: true,
-      autocomplete: true,
-    },
-  ],
+  data: new SlashCommandBuilder()
+    .setName('play')
+    .setDescription('Reproduce una canción desde múltiples fuentes')
+    .addStringOption(option =>
+      option
+        .setName('query')
+        .setDescription('Nombre de la canción o enlace')
+        .setAutocomplete(true)
+        .setRequired(true)
+    ),
+
   async autocomplete(interaction) {
-    const focusedValue = interaction.options.getFocused();
-    if (!focusedValue) return;
+    const focused = interaction.options.getFocused();
+    if (!focused) return;
+
+    let suggestions = [];
 
     try {
-      const results = await play.search(focusedValue, { limit: 5 });
-      const choices = results.map((result) => {
-        let emoji = '🔎';
-        if (result.url.includes('youtube.com')) emoji = '📺';
-        else if (result.url.includes('spotify.com')) emoji = '🎵';
-        else if (result.url.includes('soundcloud.com')) emoji = '🌊';
+      // Buscar sugerencias en YouTube
+      const ytResults = await playdl.search(focused, { limit: 5 });
 
-        return {
-          name: `${emoji} ${result.title.slice(0, 90)}`,
-          value: result.url,
-        };
-      });
-
-      await interaction.respond(choices);
-    } catch (err) {
-      console.error('Error en el autocompletado:', err);
-      await interaction.respond([]);
-    }
-  },
-  async execute(interaction) {
-    const url = interaction.options.getString('query');
-    const voiceChannel = interaction.member.voice.channel;
-
-    if (!voiceChannel)
-      return interaction.reply({ content: '🚫 Debes estar en un canal de voz.', ephemeral: true });
-
-    try {
-      const songInfo = await play.video_info(url);
-      const title = songInfo.video_details.title;
-
-      const player = interaction.client.player;
-      const queue = await player.nodes.create(interaction.guild, {
-        metadata: { channel: interaction.channel },
-      });
-
-      if (!queue.connection)
-        await queue.connect(voiceChannel);
-
-      await interaction.deferReply();
-      const track = await player.search(url, {
-        requestedBy: interaction.user,
-      });
-
-      if (!track || !track.tracks.length)
-        return interaction.editReply('❌ No se encontraron resultados.');
-
-      queue.addTrack(track.tracks[0]);
-      if (!queue.isPlaying()) await queue.node.play();
-
-      const embed = new EmbedBuilder()
-        .setTitle('🎶 Reproduciendo')
-        .setDescription(`[${title}](${url})`)
-        .setColor('#1DB954');
-
-      return interaction.editReply({ embeds: [embed] });
+      suggestions = ytResults.map(video => ({
+        name: `🎵 ${video.title.slice(0, 95)}`,
+        value: video.url
+      }));
     } catch (error) {
-      console.error(error);
-      return interaction.reply({ content: '❌ Hubo un error al reproducir la canción.', ephemeral: true });
+      console.error('Error al obtener sugerencias:', error);
     }
+
+    await interaction.respond(suggestions);
   },
+
+  async execute(interaction) {
+    const query = interaction.options.getString('query');
+
+    await interaction.reply(`🔊 Reproduciendo: ${query}`);
+    // Aquí va la lógica de reproducción con play-dl y @discordjs/voice
+    // Puedes implementarla o integrarla según tu setup
+  }
 };

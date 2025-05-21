@@ -1,19 +1,7 @@
-require('dotenv').config();
-const { Client, GatewayIntentBits, Collection } = require('discord.js');
-const { joinVoiceChannel, getVoiceConnection } = require('@discordjs/voice');
-const play = require('play-dl');
 const fs = require('fs');
 const path = require('path');
-
-const { playSong } = require('./functions/player');
-
-// Configura los tokens para play-dl ANTES de usarlo
-play.setToken({
-  youtube: {
-    api_key: process.env.YOUTUBE_API_KEY || null,
-    cookie: process.env.YOUTUBE_COOKIES || null
-  }
-});
+const { Client, Collection, GatewayIntentBits } = require('discord.js');
+require('dotenv').config();
 
 const client = new Client({
   intents: [
@@ -24,54 +12,48 @@ const client = new Client({
 
 client.commands = new Collection();
 
-const commandFiles = fs.readdirSync(path.join(__dirname, 'commands')).filter(file => file.endsWith('.js'));
+// Cargar comandos
+const commandsPath = path.join(__dirname, 'commands');
+const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
+
 for (const file of commandFiles) {
-  const command = require(`./commands/${file}`);
-  client.commands.set(command.data.name, command);
+  const filePath = path.join(commandsPath, file);
+  const command = require(filePath);
+
+  if ('data' in command && 'execute' in command) {
+    client.commands.set(command.data.name, command);
+  } else {
+    console.warn(`[ADVERTENCIA] El comando en ${file} no tiene las propiedades requeridas "data" y "execute".`);
+  }
 }
 
+// Listener para comandos slash
 client.on('interactionCreate', async interaction => {
   if (interaction.isChatInputCommand()) {
     const command = client.commands.get(interaction.commandName);
     if (!command) return;
-    try {
-      await command.execute(interaction, client);
-    } catch (error) {
-      console.error(error);
-      if (!interaction.replied) {
-        await interaction.reply({ content: '❌ Error al ejecutar el comando.', ephemeral: true });
-      }
-    }
-  }
 
-  if (interaction.isAutocomplete()) {
+    try {
+      await command.execute(interaction);
+    } catch (error) {
+      console.error(`Error al ejecutar el comando ${interaction.commandName}:`, error);
+      await interaction.reply({ content: 'Ocurrió un error al ejecutar este comando.', ephemeral: true });
+    }
+  } else if (interaction.isAutocomplete()) {
     const command = client.commands.get(interaction.commandName);
-    if (!command?.autocomplete) return;
+    if (!command || !command.autocomplete) return;
+
     try {
       await command.autocomplete(interaction);
     } catch (error) {
-      console.error(error);
+      console.error(`Error en autocomplete de ${interaction.commandName}:`, error);
     }
   }
 });
 
-// Función para reproducir canción, delega a functions/player.js
-client.playSong = async (interaction, url) => {
-  const voiceChannel = interaction.member.voice.channel;
-  if (!voiceChannel) return interaction.reply({ content: '❌ Debes estar en un canal de voz.', ephemeral: true });
-
-  try {
-    await playSong(voiceChannel, url);
-  } catch (error) {
-    console.error('❌ Error al reproducir canción:', error);
-    if (!interaction.replied) {
-      interaction.followUp({ content: '❌ No se pudo reproducir la canción.', ephemeral: true });
-    }
-  }
-};
-
+// Login del bot
 client.once('ready', () => {
-  console.log(`✅ Bot iniciado como ${client.user.tag}`);
+  console.log(`Bot conectado como ${client.user.tag}`);
 });
 
 client.login(process.env.TOKEN);
