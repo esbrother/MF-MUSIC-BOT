@@ -21,11 +21,10 @@ module.exports = {
       const results = await play.search(focusedValue, { limit: 5 });
 
       const choices = results.map(video => ({
-        name: video.title.slice(0, 100), // Discord impone límite de 100 caracteres
+        name: video.title.slice(0, 100), // Limite 100 caracteres
         value: video.url
       }));
 
-      // Evita error "Unknown Interaction"
       if (!interaction.responded) {
         await interaction.respond(choices);
       }
@@ -41,23 +40,22 @@ module.exports = {
     const query = interaction.options.getString('query');
 
     if (!query) {
-      // Usa "flags" para respuesta efímera
       return await interaction.reply({
         content: '❌ No se proporcionó ninguna canción.',
-        flags: 64 // efímero
+        ephemeral: true
       });
     }
 
     try {
+      // Aquí puedes poner la lógica para reproducir la canción (más adelante)
       await interaction.reply(`🔊 Reproduciendo: ${query}`);
-      // Aquí irá luego la lógica de reproducción real con @discordjs/voice
     } catch (err) {
       console.error('Error ejecutando /play:', err);
 
-      if (!interaction.replied) {
+      if (!interaction.replied && !interaction.deferred) {
         await interaction.reply({
           content: '❌ Ocurrió un error al ejecutar el comando.',
-          flags: 64
+          ephemeral: true
         });
       }
     }

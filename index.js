@@ -12,7 +12,6 @@ const client = new Client({
 
 client.commands = new Collection();
 
-// Cargar comandos
 const commandsPath = path.join(__dirname, 'commands');
 const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
 
@@ -30,6 +29,8 @@ client.once(Events.ClientReady, () => {
 });
 
 client.on(Events.InteractionCreate, async interaction => {
+  if (!interaction.isChatInputCommand() && !interaction.isAutocomplete()) return;
+
   const command = client.commands.get(interaction.commandName);
   if (!command) return;
 
@@ -41,10 +42,10 @@ client.on(Events.InteractionCreate, async interaction => {
     }
   } catch (error) {
     console.error('❌ Error en interacción:', error);
-    if (interaction.isRepliable() && !interaction.replied) {
+    if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
       await interaction.reply({
         content: '❌ Error al ejecutar el comando.',
-        flags: 64
+        ephemeral: true
       });
     }
   }
