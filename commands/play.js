@@ -19,10 +19,14 @@ module.exports = {
     try {
       const results = await play.search(focusedValue, { limit: 5, source: { youtube: 'video' } });
 
-      const suggestions = results.map(video => ({
-        name: `🎵 ${video.title}`,
-        value: video.url
-      }));
+      const suggestions = results.map(video => {
+        let title = video.title;
+        if (title.length > 97) title = title.substring(0, 97) + '...';
+        return {
+          name: `🎵 ${title}`,
+          value: video.url
+        };
+      });
 
       await interaction.respond(suggestions);
     } catch (error) {
