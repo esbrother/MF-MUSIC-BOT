@@ -1,44 +1,44 @@
 const { SlashCommandBuilder } = require('discord.js');
-const playdl = require('play-dl');
+const play = require('play-dl');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('play')
-    .setDescription('Reproduce una canción desde múltiples fuentes')
+    .setDescription('Reproduce una canción.')
     .addStringOption(option =>
-      option
-        .setName('query')
-        .setDescription('Nombre de la canción o enlace')
-        .setAutocomplete(true)
+      option.setName('query')
+        .setDescription('Nombre o enlace de la canción')
         .setRequired(true)
+        .setAutocomplete(true)
     ),
 
   async autocomplete(interaction) {
-    const focused = interaction.options.getFocused();
-    if (!focused) return;
-
-    let suggestions = [];
+    const focusedValue = interaction.options.getFocused();
+    if (!focusedValue) return interaction.respond([]);
 
     try {
-      // Buscar sugerencias en YouTube
-      const ytResults = await playdl.search(focused, { limit: 5 });
-
-      suggestions = ytResults.map(video => ({
-        name: `🎵 ${video.title.slice(0, 95)}`,
+      const results = await play.search(focusedValue, { limit: 5 });
+      const choices = results.map(video => ({
+        name: `🎵 ${video.title}`,
         value: video.url
       }));
-    } catch (error) {
-      console.error('Error al obtener sugerencias:', error);
-    }
 
-    await interaction.respond(suggestions);
+      await interaction.respond(choices);
+    } catch (error) {
+      console.error('Error en autocomplete:', error);
+      await interaction.respond([]);
+    }
   },
 
   async execute(interaction) {
     const query = interaction.options.getString('query');
 
+    if (!query) {
+      return await interaction.reply({ content: '❌ No se proporcionó ninguna canción.', ephemeral: true });
+    }
+
     await interaction.reply(`🔊 Reproduciendo: ${query}`);
-    // Aquí va la lógica de reproducción con play-dl y @discordjs/voice
-    // Puedes implementarla o integrarla según tu setup
+
+    // Aquí puedes agregar la lógica de conexión a voz y reproducción con play-dl y @discordjs/voice
   }
 };
