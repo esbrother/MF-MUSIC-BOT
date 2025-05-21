@@ -20,15 +20,15 @@ const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 
 (async () => {
   try {
-    console.log('🔄 Refrescando comandos de aplicación (/)…');
+    console.log('🔁 Actualizando comandos...');
 
     await rest.put(
       Routes.applicationCommands(process.env.CLIENT_ID),
-      { body: commands }
+      { body: commands },
     );
 
-    console.log('✅ Comandos actualizados exitosamente.');
+    console.log('✅ Comandos actualizados correctamente.');
   } catch (error) {
-    console.error('❌ Error al actualizar comandos:', error);
+    console.error('❌ Error al registrar comandos:', error);
   }
 })();
