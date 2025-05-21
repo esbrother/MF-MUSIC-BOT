@@ -12,6 +12,7 @@ const client = new Client({
 
 client.commands = new Collection();
 
+// Cargar comandos
 const commandsPath = path.join(__dirname, 'commands');
 const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
 
@@ -45,7 +46,7 @@ client.on(Events.InteractionCreate, async interaction => {
     if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
       await interaction.reply({
         content: '❌ Error al ejecutar el comando.',
-        ephemeral: true
+        flags: 64
       });
     }
   }

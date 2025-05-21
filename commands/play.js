@@ -1,12 +1,13 @@
 const { SlashCommandBuilder } = require('discord.js');
-const play = require('play-dl');
+const playdl = require('play-dl');
+const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus } = require('@discordjs/voice');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('play')
-    .setDescription('Reproduce una canción.')
+    .setDescription('Reproduce una canción desde YouTube, Spotify o SoundCloud.')
     .addStringOption(option =>
-      option.setName('query')
+      option.setName('canción')
         .setDescription('Nombre o enlace de la canción')
         .setRequired(true)
         .setAutocomplete(true)
@@ -14,61 +15,65 @@ module.exports = {
 
   async autocomplete(interaction) {
     const focusedValue = interaction.options.getFocused();
-
-    if (!focusedValue) return;
+    if (!focusedValue) {
+      try {
+        await interaction.respond([]);
+      } catch (e) {
+        console.error('❌ No se pudo enviar respuesta vacía en autocomplete:', e);
+      }
+      return;
+    }
 
     try {
-      const results = await play.search(focusedValue, { limit: 5 });
-
-      const choices = results.map(video => ({
-        name: video.title.slice(0, 100), // Discord impone límite de 100 caracteres
-        value: video.url
+      const results = await playdl.search(focusedValue, { limit: 5 });
+      const suggestions = results.map(result => ({
+        name: `[${result.source}] ${result.title.slice(0, 75)}`,
+        value: result.url
       }));
-
-      // ✅ Solo responder si aún no se ha respondido
-      if (!interaction.responded) {
-        await interaction.respond(choices);
-      }
+      await interaction.respond(suggestions);
     } catch (error) {
       console.error('❌ Error en autocomplete:', error);
-      // Evita segundo intento de respuesta si ya fue reconocida
-      if (!interaction.responded) {
-        try {
-          await interaction.respond([]);
-        } catch (err) {
-          console.error('❌ No se pudo enviar respuesta vacía en autocomplete:', err);
-        }
+      try {
+        await interaction.respond([]);
+      } catch (e) {
+        console.error('❌ No se pudo enviar respuesta vacía en autocomplete:', e);
       }
     }
   },
 
   async execute(interaction) {
-    const query = interaction.options.getString('query');
+    const url = interaction.options.getString('canción');
+    const member = interaction.member;
+    const channel = member.voice.channel;
 
-    if (!query) {
-      return await interaction.reply({
-        content: '❌ No se proporcionó ninguna canción.',
-        ephemeral: true
-      });
+    if (!channel) {
+      return interaction.reply({ content: '🔇 Debes estar en un canal de voz para usar este comando.', flags: 64 });
     }
 
     try {
-      await interaction.reply(`🔊 Reproduciendo: ${query}`);
-      // Aquí deberías insertar la lógica de reproducción real usando @discordjs/voice
-    } catch (err) {
-      console.error('❌ Error ejecutando /play:', err);
+      const stream = await playdl.stream(url);
+      const resource = createAudioResource(stream.stream, {
+        inputType: stream.type
+      });
 
-      // Verifica si ya se respondió
-      if (!interaction.replied && interaction.isRepliable()) {
-        try {
-          await interaction.reply({
-            content: '❌ Ocurrió un error al ejecutar el comando.',
-            ephemeral: true
-          });
-        } catch (e) {
-          console.error('❌ No se pudo enviar mensaje de error:', e);
-        }
-      }
+      const connection = joinVoiceChannel({
+        channelId: channel.id,
+        guildId: channel.guild.id,
+        adapterCreator: channel.guild.voiceAdapterCreator
+      });
+
+      const player = createAudioPlayer();
+      connection.subscribe(player);
+      player.play(resource);
+
+      interaction.reply({ content: `▶️ Reproduciendo: ${url}` });
+
+      player.on(AudioPlayerStatus.Idle, () => {
+        connection.destroy();
+      });
+    } catch (error) {
+      console.error('❌ Error al reproducir la canción:', error);
+      interaction.reply({ content: '❌ No se pudo reproducir la canción.', flags: 64 });
     }
   }
 };
