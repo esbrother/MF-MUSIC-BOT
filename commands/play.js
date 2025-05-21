@@ -1,77 +1,81 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { ApplicationCommandOptionType, EmbedBuilder } = require('discord.js');
 const play = require('play-dl');
 
 module.exports = {
-  data: new SlashCommandBuilder()
-    .setName('play')
-    .setDescription('Reproduce música desde varias plataformas')
-    .addStringOption(option =>
-      option.setName('busqueda')
-        .setDescription('Nombre o URL de la canción')
-        .setRequired(true)
-        .setAutocomplete(true)
-    ),
-
+  name: 'play',
+  description: 'Reproduce una canción desde YouTube, Spotify o SoundCloud.',
+  options: [
+    {
+      name: 'query',
+      description: 'Nombre o enlace de la canción.',
+      type: ApplicationCommandOptionType.String,
+      required: true,
+      autocomplete: true,
+    },
+  ],
   async autocomplete(interaction) {
     const focusedValue = interaction.options.getFocused();
-    if (!focusedValue) return interaction.respond([]);
+    if (!focusedValue) return;
 
     try {
-      const results = await play.search(focusedValue, { limit: 5, source: { youtube: 'video' } });
+      const results = await play.search(focusedValue, { limit: 5 });
+      const choices = results.map((result) => {
+        let emoji = '🔎';
+        if (result.url.includes('youtube.com')) emoji = '📺';
+        else if (result.url.includes('spotify.com')) emoji = '🎵';
+        else if (result.url.includes('soundcloud.com')) emoji = '🌊';
 
-      const suggestions = results.map(video => {
-        let title = video.title;
-        if (title.length > 97) title = title.substring(0, 97) + '...';
         return {
-          name: `🎵 ${title}`,
-          value: video.url
+          name: `${emoji} ${result.title.slice(0, 90)}`,
+          value: result.url,
         };
       });
 
-      await interaction.respond(suggestions);
-    } catch (error) {
-      console.error('❌ Error en autocompletado:', error);
+      await interaction.respond(choices);
+    } catch (err) {
+      console.error('Error en el autocompletado:', err);
       await interaction.respond([]);
     }
   },
-
-  async execute(interaction, client) {
-    const query = interaction.options.getString('busqueda');
+  async execute(interaction) {
+    const url = interaction.options.getString('query');
     const voiceChannel = interaction.member.voice.channel;
 
-    if (!voiceChannel) return interaction.reply({ content: '❌ Debes estar en un canal de voz para reproducir música.', ephemeral: true });
-
-    await interaction.deferReply();
+    if (!voiceChannel)
+      return interaction.reply({ content: '🚫 Debes estar en un canal de voz.', ephemeral: true });
 
     try {
-      let songInfo;
-      let songUrl;
+      const songInfo = await play.video_info(url);
+      const title = songInfo.video_details.title;
 
-      if (play.yt_validate(query) === 'video') {
-        songInfo = await play.video_info(query);
-        songUrl = songInfo.video_details.url;
-      } else {
-        const results = await play.search(query, { limit: 1, source: { youtube: 'video' } });
-        if (!results.length) return interaction.editReply('❌ No se encontraron resultados para tu búsqueda.');
-        songInfo = results[0];
-        songUrl = songInfo.url;
-      }
+      const player = interaction.client.player;
+      const queue = await player.nodes.create(interaction.guild, {
+        metadata: { channel: interaction.channel },
+      });
 
-      await client.playSong(interaction, songUrl);
+      if (!queue.connection)
+        await queue.connect(voiceChannel);
+
+      await interaction.deferReply();
+      const track = await player.search(url, {
+        requestedBy: interaction.user,
+      });
+
+      if (!track || !track.tracks.length)
+        return interaction.editReply('❌ No se encontraron resultados.');
+
+      queue.addTrack(track.tracks[0]);
+      if (!queue.isPlaying()) await queue.node.play();
 
       const embed = new EmbedBuilder()
-        .setTitle(songInfo.title)
-        .setURL(songUrl)
-        .setThumbnail(songInfo.thumbnails[0].url)
-        .setDescription(`🎶 Reproduciendo en: **${voiceChannel.name}**`)
-        .setColor('Random')
-        .setFooter({ text: '🎧 MF Music Bot' });
+        .setTitle('🎶 Reproduciendo')
+        .setDescription(`[${title}](${url})`)
+        .setColor('#1DB954');
 
-      await interaction.editReply({ embeds: [embed] });
-
+      return interaction.editReply({ embeds: [embed] });
     } catch (error) {
-      console.error('❌ Error en /play:', error);
-      await interaction.editReply('❌ Hubo un error al intentar reproducir la canción.');
+      console.error(error);
+      return interaction.reply({ content: '❌ Hubo un error al reproducir la canción.', ephemeral: true });
     }
   },
 };
