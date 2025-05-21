@@ -72,13 +72,3 @@ client.once('ready', () => {
     });
   }
 });
-
-client.login(process.env.TOKEN);
-
-const playdl = require('play-dl');
-
-playdl.setToken({
-  youtube: {
-    cookie: process.env.YOUTUBE_COOKIES
-  }
-});
